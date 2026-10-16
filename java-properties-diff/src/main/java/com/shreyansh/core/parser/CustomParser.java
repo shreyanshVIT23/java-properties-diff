@@ -8,10 +8,11 @@ import java.util.HexFormat;
 import java.util.List;
 
 /**
- * Hand-written parser for the {@link java.util.Properties#load(java.io.Reader)} format.
+ * Hand-written parser for the {@link java.util.Properties#load(java.io.Reader)}
+ * format.
  *
- * <p>Unlike {@link DefaultParser}, it returns the pairs in file order and keeps every
- * occurrence of a duplicated key.
+ * <p>Unlike {@link DefaultParser}, it returns the pairs in file order and keeps
+ * every occurrence of a duplicated key.
  */
 public class CustomParser implements Parser {
 
@@ -24,19 +25,22 @@ public class CustomParser implements Parser {
       }
       return List.copyOf(result);
     } catch (IOException | IllegalArgumentException e) {
-      // IllegalArgumentException comes from a malformed unicode escape, same as DefaultParser
+      // IllegalArgumentException comes from a malformed unicode escape, same as
+      // DefaultParser
       throw new PropertiesReadException(path, e);
     }
   }
 
   /**
-   * Joins natural lines into logical lines and drops blank and comment lines. Every returned
+   * Joins natural lines into logical lines and drops blank and comment lines.
+   * Every returned
    * line starts at its first non-white space character.
    */
   private static List<String> logicalLines(String content) {
     List<String> logical = new ArrayList<>();
     StringBuilder current = null;
-    // String.lines() splits on \n, \r and \r\n: the same terminators Properties uses
+    // String.lines() splits on \n, \r and \r\n: the same terminators Properties
+    // uses
     for (String natural : content.lines().toList()) {
       // Leading white space is ignored on new lines and on continuation lines alike
       String line = natural.substring(skipWhitespace(natural, 0));
@@ -62,7 +66,8 @@ public class CustomParser implements Parser {
   }
 
   /**
-   * Splits a logical line at the first unescaped '=', ':' or white space, then decodes escapes.
+   * Splits a logical line at the first unescaped '=', ':' or white space, then
+   * decodes escapes.
    */
   private static KeyValue parseLine(String line) {
     int keyEnd = 0;
@@ -90,7 +95,8 @@ public class CustomParser implements Parser {
   }
 
   /**
-   * Decodes {@code \t \n \r \f \\uXXXX}; any other escaped character stands for itself.
+   * Decodes {@code \t \n \r \f \\uXXXX}; any other escaped character stands for
+   * itself.
    *
    * @throws IllegalArgumentException on a malformed unicode escape
    */
@@ -112,7 +118,8 @@ public class CustomParser implements Parser {
         if (i + 4 > raw.length()) {
           throw new IllegalArgumentException("Malformed \\uxxxx encoding.");
         }
-        // fromHexDigits accepts only ASCII hex digits and throws IllegalArgumentException otherwise
+        // fromHexDigits accepts only ASCII hex digits and throws
+        // IllegalArgumentException otherwise
         out.append((char) HexFormat.fromHexDigits(raw, i, i + 4));
         i += 4;
       } else {
@@ -129,7 +136,10 @@ public class CustomParser implements Parser {
     return out.toString();
   }
 
-  /** Returns the index of the first non-white space character at or after the given index. */
+  /**
+   * Returns the index of the first non-white space character at or after the
+   * given index.
+   */
   private static int skipWhitespace(String s, int from) {
     int i = from;
     while (i < s.length() && isWhitespace(s.charAt(i))) {

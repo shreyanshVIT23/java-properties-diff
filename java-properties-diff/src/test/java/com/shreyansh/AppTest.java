@@ -1,19 +1,19 @@
 package com.shreyansh;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit test for simple App.
+ * Unit tests for {@link App}.
  */
 public class AppTest {
 
-    /**
-     * Rigorous Test :-)
-     */
-    @Test
-    public void shouldAnswerWithTrue() {
-        assertTrue(true);
-    }
+  /**
+   * The placeholder entry point runs without throwing.
+   */
+  @Test
+  void mainRunsWithoutError() {
+    assertDoesNotThrow(() -> App.main(new String[0]));
+  }
 }

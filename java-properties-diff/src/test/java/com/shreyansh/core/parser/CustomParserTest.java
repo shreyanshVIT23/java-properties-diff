@@ -1,8 +1,12 @@
 package com.shreyansh.core.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -85,6 +89,43 @@ public class CustomParserTest {
     assertEquals(
         List.of(new KeyValue("Aé", "€"), new KeyValue("utf8", "héllo")),
         parse("\\u0041\\u00E9=\\u20ac\nutf8=héllo\n")); // file gets literal backslash-u escapes
+  }
+
+  @Test
+  void valueKeepsInternalAndTrailingWhitespace() throws Exception {
+    assertEquals(List.of(new KeyValue("key", "a  b  ")), parse("key =   a  b  \n"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"key=", "key", "key   ", "key =   ", "key:"})
+  void missingValueGivesEmptyString(String line) throws Exception {
+    assertEquals(List.of(new KeyValue("key", "")), parse(line + "\n"));
+  }
+
+  @Test
+  void keepsFileOrderAndDuplicateKeys() throws Exception {
+    assertEquals(
+        List.of(new KeyValue("b", "1"), new KeyValue("a", "2"), new KeyValue("b", "3")),
+        parse("b=1\na=2\nb=3\n"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"key=\\u12zz", "key=\\u12", "\\uXYZW=value"})
+  void malformedUnicodeEscapeThrows(String line) throws Exception {
+    Path file = Files.writeString(tempDir.resolve("bad.properties"), line + "\n");
+
+    PropertiesReadException ex =
+        assertThrows(PropertiesReadException.class, () -> parser.parseFile(file));
+    assertTrue(ex.getMessage().contains(file.toString()));
+  }
+
+  @Test
+  void missingFileThrowsWithIoCause() {
+    Path missing = tempDir.resolve("does-not-exist.properties");
+
+    PropertiesReadException ex =
+        assertThrows(PropertiesReadException.class, () -> parser.parseFile(missing));
+    assertInstanceOf(NoSuchFileException.class, ex.getCause());
   }
 
   private List<KeyValue> parse(String content) throws Exception {

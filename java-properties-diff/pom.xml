@@ -115,6 +115,8 @@
           <failOnViolation>true</failOnViolation>
           <violationSeverity>warning</violationSeverity>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <!-- test fixtures contain tabs/trailing spaces on purpose; they are not Java code -->
+          <includeTestResources>false</includeTestResources>
         </configuration>
         <executions>
           <execution>

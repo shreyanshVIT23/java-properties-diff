@@ -1,6 +1,10 @@
 package com.shreyansh.core.diff;
 
 import com.shreyansh.core.parser.KeyValue;
+import com.shreyansh.core.parser.Parser;
+import com.shreyansh.core.parser.ParserMode;
+import com.shreyansh.core.parser.PropertiesReadException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,6 +38,21 @@ public class PropertiesDiff {
       entries.add(new DiffEntry(key, leftValue, rightValue, typeOf(leftValue, rightValue)));
     }
     return new DiffResult(entries);
+  }
+
+  /**
+   * Parses both files with the given mode and compares them.
+   *
+   * @param left the left properties file
+   * @param right the right properties file
+   * @param mode which parser reads the files
+   * @return one entry per key found in either file, sorted by key
+   * @throws PropertiesReadException if either file cannot be read or is malformed
+   */
+  public DiffResult compare(Path left, Path right, ParserMode mode)
+      throws PropertiesReadException {
+    Parser parser = mode.create();
+    return compare(parser.parseFile(left), parser.parseFile(right));
   }
 
   private static Map<String, String> lastValueByKey(List<KeyValue> pairs) {

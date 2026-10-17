@@ -9,7 +9,6 @@ import com.shreyansh.core.parser.NumberedKeyValue;
 import com.shreyansh.core.parser.Parser;
 import com.shreyansh.core.parser.ParserMode;
 import com.shreyansh.core.parser.PropertiesReadException;
-import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -43,7 +42,7 @@ public class DiffCommand implements Callable<Integer> {
   @Parameters(index = "1", paramLabel = "RIGHT", description = "The file to compare with.")
   Path right;
 
-  @Option(names = "--mode", defaultValue = "custom",
+  @Option(names = "--mode", defaultValue = "custom", paramLabel = "MODE",
       description = "Parser: ${COMPLETION-CANDIDATES}. Only custom reports line numbers.")
   ParserMode mode;
 
@@ -54,6 +53,7 @@ public class DiffCommand implements Callable<Integer> {
   boolean showUnchanged;
 
   @Option(names = "--only", split = ",", paramLabel = "TYPE",
+      showDefaultValue = CommandLine.Help.Visibility.NEVER,
       description = "Only list these types: changed, only-in-left, only-in-right, unchanged.")
   Set<DiffType> only = new LinkedHashSet<>();
 
@@ -64,6 +64,10 @@ public class DiffCommand implements Callable<Integer> {
   @Option(names = "--width", paramLabel = "COLUMNS",
       description = "Output width (default: $COLUMNS, else " + Terminal.DEFAULT_WIDTH + ").")
   Integer width;
+
+  @Option(names = "--no-pager",
+      description = "Print directly instead of through $PAGER (default: less).")
+  boolean noPager;
 
   @Spec
   CommandSpec spec;
@@ -118,9 +122,7 @@ public class DiffCommand implements Callable<Integer> {
         ? new SideBySideRenderer().render(result, options)
         : new UnifiedRenderer().render(result, options);
 
-    PrintWriter out = spec.commandLine().getOut();
-    out.print(text);
-    out.flush();
+    new Pager(terminal).show(text, spec.commandLine().getOut(), !noPager);
     return result.hasDifferences() ? 1 : 0;
   }
 

@@ -3,6 +3,7 @@ package com.shreyansh.cli;
 import com.shreyansh.core.diff.DiffType;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Everything a renderer needs besides the diff itself.
@@ -36,5 +37,20 @@ public record RenderOptions(String leftLabel, String rightLabel, int width, bool
     only = Set.copyOf(only);
     leftLines = Map.copyOf(leftLines);
     rightLines = Map.copyOf(rightLines);
+  }
+
+  /**
+   * Width of a line-number column: enough digits for the largest line number in either file,
+   * and never less than 4, so files under 10,000 lines keep the usual layout. Renderers call
+   * this once per render, since it scans both maps.
+   *
+   * @return the number of characters reserved for one line number
+   */
+  public int numberWidth() {
+    int largest = Stream.concat(leftLines.values().stream(), rightLines.values().stream())
+        .mapToInt(Integer::intValue)
+        .max()
+        .orElse(0);
+    return Math.max(4, String.valueOf(largest).length());
   }
 }

@@ -20,9 +20,10 @@ public class UnifiedRenderer {
    * @return the full output, ending with a newline
    */
   public String render(DiffResult result, RenderOptions options) {
+    int digits = options.numberWidth();
     StringBuilder out = new StringBuilder(Decorations.header(options));
     for (DiffType type : Decorations.visibleTypes(options)) {
-      List<DiffEntry> entries = result.byType(type);
+      List<DiffEntry> entries = Decorations.ordered(result.byType(type), options);
       if (entries.isEmpty()) {
         continue;
       }
@@ -30,7 +31,7 @@ public class UnifiedRenderer {
           .append(Decorations.sectionTitle(type, entries.size(), options.color()))
           .append('\n');
       for (DiffEntry entry : entries) {
-        out.append(rows(entry, options));
+        out.append(rows(entry, options, digits));
       }
     }
     out.append('\n').append(Decorations.summary(result, options.color())).append('\n');
@@ -38,7 +39,7 @@ public class UnifiedRenderer {
   }
 
   /** The one or two rows of an entry, each ending with a newline. */
-  private static String rows(DiffEntry entry, RenderOptions options) {
+  private static String rows(DiffEntry entry, RenderOptions options, int digits) {
     Integer leftLine = options.leftLines().get(entry.key());
     Integer rightLine = options.rightLines().get(entry.key());
     boolean color = options.color();
@@ -48,20 +49,20 @@ public class UnifiedRenderer {
     return switch (entry.type()) {
       case CHANGED -> {
         WordDiff diff = WordDiff.of(entry.leftValue(), entry.rightValue());
-        yield Decorations.gutter(leftLine, null, color)
+        yield Decorations.gutter(leftLine, null, digits, color)
             + highlighted("- " + keyPart, diff.prefix(), diff.leftMiddle(), diff.suffix(),
                 Style.MINUS, Style.MINUS_EMPH, color)
             + "\n"
-            + Decorations.gutter(null, rightLine, color)
+            + Decorations.gutter(null, rightLine, digits, color)
             + highlighted("+ " + keyPart, diff.prefix(), diff.rightMiddle(), diff.suffix(),
                 Style.PLUS, Style.PLUS_EMPH, color)
             + "\n";
       }
-      case ONLY_IN_LEFT -> Decorations.gutter(leftLine, null, color)
+      case ONLY_IN_LEFT -> Decorations.gutter(leftLine, null, digits, color)
           + Style.MINUS.paint("- " + keyPart + Style.visible(entry.leftValue()), color) + "\n";
-      case ONLY_IN_RIGHT -> Decorations.gutter(null, rightLine, color)
+      case ONLY_IN_RIGHT -> Decorations.gutter(null, rightLine, digits, color)
           + Style.PLUS.paint("+ " + keyPart + Style.visible(entry.rightValue()), color) + "\n";
-      case UNCHANGED -> Decorations.gutter(leftLine, rightLine, color)
+      case UNCHANGED -> Decorations.gutter(leftLine, rightLine, digits, color)
           + "  " + keyPart + Style.visible(entry.leftValue()) + "\n";
     };
   }

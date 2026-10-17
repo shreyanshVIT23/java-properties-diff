@@ -22,11 +22,8 @@ public class SideBySideRenderer {
    */
   static final int MIN_COLUMN = 10;
 
-  /**
-   * Space taken by the two gutters ("│%4s │ ", 8 characters each) and the
-   * separator.
-   */
-  private static final int CHROME = 17;
+  /** Characters in one gutter besides the number itself: "│", " │ ". */
+  private static final int GUTTER_EXTRA = 4;
 
   private static final String WRAP = "↵";
 
@@ -38,10 +35,13 @@ public class SideBySideRenderer {
    * @return the full output, ending with a newline
    */
   public String render(DiffResult result, RenderOptions options) {
-    int column = Math.max(MIN_COLUMN, (options.width() - CHROME) / 2);
+    int digits = options.numberWidth();
+    // Two gutters plus the space between the cells; with 4 digits this is 17
+    int chrome = 2 * (digits + GUTTER_EXTRA) + 1;
+    int column = Math.max(MIN_COLUMN, (options.width() - chrome) / 2);
     StringBuilder out = new StringBuilder(Decorations.header(options));
     for (DiffType type : Decorations.visibleTypes(options)) {
-      List<DiffEntry> entries = result.byType(type);
+      List<DiffEntry> entries = Decorations.ordered(result.byType(type), options);
       if (entries.isEmpty()) {
         continue;
       }
@@ -49,7 +49,7 @@ public class SideBySideRenderer {
           .append(Decorations.sectionTitle(type, entries.size(), options.color()))
           .append('\n');
       for (DiffEntry entry : entries) {
-        out.append(rows(entry, options, column));
+        out.append(rows(entry, options, column, digits));
       }
     }
     out.append('\n').append(Decorations.summary(result, options.color())).append('\n');
@@ -57,7 +57,7 @@ public class SideBySideRenderer {
   }
 
   /** All rows of one entry; only the first row carries line numbers. */
-  private static String rows(DiffEntry entry, RenderOptions options, int column) {
+  private static String rows(DiffEntry entry, RenderOptions options, int column, int digits) {
     Cell left = cell(entry, true);
     Cell right = cell(entry, false);
     List<int[]> leftChunks = left == null ? List.of() : chunks(left.points().length, column);
@@ -70,7 +70,8 @@ public class SideBySideRenderer {
       String rightText = cellRow(right, rightChunks, i, 0, color);
       Integer leftLine = i == 0 && left != null ? options.leftLines().get(entry.key()) : null;
       Integer rightLine = i == 0 && right != null ? options.rightLines().get(entry.key()) : null;
-      String row = gutter(leftLine, color) + leftText + " " + gutter(rightLine, color) + rightText;
+      String row = gutter(leftLine, digits, color) + leftText + " "
+          + gutter(rightLine, digits, color) + rightText;
       out.append(row.stripTrailing()).append('\n');
     }
     return out.toString();
@@ -145,9 +146,10 @@ public class SideBySideRenderer {
     return out.append(" ".repeat(Math.max(0, padTo - width))).toString();
   }
 
-  /** One side's line-number gutter; an unknown number is blank. */
-  private static String gutter(Integer line, boolean color) {
-    return Style.DIM.paint(String.format("│%4s │ ", line == null ? "" : line), color);
+  /** One side's line-number gutter, right-aligned in the given width; unknown is blank. */
+  private static String gutter(Integer line, int digits, boolean color) {
+    String text = String.format("│%" + digits + "s │ ", line == null ? "" : line);
+    return Style.DIM.paint(text, color);
   }
 
   /**

@@ -114,6 +114,54 @@ public class UnifiedRendererTest {
     assertTrue(output.contains("│ - k\\tey=a\\tb\n"));
   }
 
+  @Test
+  void gutterWidensToFitLineNumbersAboveFourDigits() {
+    String output = renderer.render(RESULT, options(false, false, Set.of(),
+        Map.of("a.changed", 12345, "b.left", 7), Map.of("a.changed", 3, "c.right", 6)));
+
+    // Every row gets the 5-digit width "%5s ⋮%5s │ ", so the separators stay aligned
+    String blank = " ".repeat(5);
+    assertTrue(output.contains("\n12345 ⋮" + blank + " │ - a.changed=1.0\n"));
+    assertTrue(output.contains("\n" + blank + " ⋮    3 │ + a.changed=1.1\n"));
+    assertTrue(output.contains("\n    7 ⋮" + blank + " │ - b.left=x\n"));
+    assertTrue(output.contains("\n" + blank + " ⋮    6 │ + c.right=y\n"));
+  }
+
+  @Test
+  void rowsFollowFileOrderWhenLineNumbersAreKnown() {
+    // Core order is by key text: key.10, key.100, key.9, then only-in-right a, z
+    DiffResult result = new DiffResult(List.of(
+        new DiffEntry("key.10", "1", "2", DiffType.CHANGED),
+        new DiffEntry("key.100", "1", "2", DiffType.CHANGED),
+        new DiffEntry("key.9", "1", "2", DiffType.CHANGED),
+        new DiffEntry("a", null, "x", DiffType.ONLY_IN_RIGHT),
+        new DiffEntry("z", null, "y", DiffType.ONLY_IN_RIGHT)));
+
+    // Lines chosen so file order (100, 9, 10) differs from text order (10, 100, 9)
+    // and from natural order (9, 10, 100)
+    String output = renderer.render(result, options(false, false, Set.of(),
+        Map.of("key.100", 3, "key.9", 7, "key.10", 50),
+        Map.of("key.100", 3, "key.9", 7, "key.10", 50, "a", 9, "z", 1)));
+
+    // Changed rows follow the left file's lines; only-in-right rows the right file's
+    assertTrue(output.indexOf("- key.100=") < output.indexOf("- key.9="));
+    assertTrue(output.indexOf("- key.9=") < output.indexOf("- key.10="));
+    assertTrue(output.indexOf("+ z=") < output.indexOf("+ a="));
+  }
+
+  @Test
+  void withoutLineNumbersRowsUseNaturalKeyOrder() {
+    DiffResult result = new DiffResult(List.of(
+        new DiffEntry("key.10", "1", "2", DiffType.CHANGED),
+        new DiffEntry("key.100", "1", "2", DiffType.CHANGED),
+        new DiffEntry("key.9", "1", "2", DiffType.CHANGED)));
+
+    String output = renderer.render(result, options(false, false, Set.of(), Map.of(), Map.of()));
+
+    assertTrue(output.indexOf("- key.9=") < output.indexOf("- key.10="));
+    assertTrue(output.indexOf("- key.10=") < output.indexOf("- key.100="));
+  }
+
   private static RenderOptions options(boolean color, boolean showUnchanged, Set<DiffType> only,
       Map<String, Integer> leftLines, Map<String, Integer> rightLines) {
     return new RenderOptions("left.properties", "right.properties", 30, color, showUnchanged,

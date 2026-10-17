@@ -118,6 +118,34 @@ public class SideBySideRendererTest {
         "unchanged (1)\n│   7 │ d.same=z" + " ".repeat(6) + "│   8 │ d.same=z\n"));
   }
 
+  @Test
+  void gutterWidensToFitLineNumbersAboveFourDigits() {
+    // 45 = 9 + 13 + 1 + 9 + 13: each gutter grows by one digit, the cells keep 13 columns
+    RenderOptions wide = new RenderOptions("left.properties", "right.properties", WIDTH + 2,
+        false, false, Set.of(), Map.of("a.changed", 12345, "b.left", 7), Map.of("a.changed", 3));
+
+    String output = renderer.render(RESULT, wide);
+
+    // Each gutter is "│%5s │ ": the number is right-aligned in 5 characters
+    assertTrue(output.contains("\n│12345 │ a.changed=1.0 │    3 │ a.changed=1.1\n"));
+    String onlyLeft = "│    7 │ b.left=x" + " ".repeat(6) + "│" + " ".repeat(5) + " │";
+    assertTrue(output.contains("\n" + onlyLeft + "\n"));
+  }
+
+  @Test
+  void rowsFollowFileOrderWhenLineNumbersAreKnown() {
+    // "b" is on line 1 and "a" on line 2: file order differs from text and natural order
+    DiffResult result = new DiffResult(List.of(
+        new DiffEntry("a", "1", "2", DiffType.CHANGED),
+        new DiffEntry("b", "1", "2", DiffType.CHANGED)));
+    Map<String, Integer> lines = Map.of("b", 1, "a", 2);
+
+    String output = renderer.render(result, new RenderOptions("left.properties",
+        "right.properties", WIDTH, false, false, Set.of(), lines, lines));
+
+    assertTrue(output.indexOf("│ b=1") < output.indexOf("│ a=1"));
+  }
+
   private static RenderOptions options(int width, boolean color, boolean showUnchanged,
       boolean withLines) {
     return new RenderOptions("left.properties", "right.properties", width, color, showUnchanged,

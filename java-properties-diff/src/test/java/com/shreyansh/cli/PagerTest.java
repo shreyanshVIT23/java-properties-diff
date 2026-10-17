@@ -2,6 +2,7 @@ package com.shreyansh.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.shreyansh.cli.platform.TestFiles;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
@@ -13,8 +14,9 @@ import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Tests for {@link Pager}. Real pager processes are started through {@code sh}, with commands
- * that write to a temp file instead of a screen.
+ * Tests for {@link Pager}. Real pager processes are started, with commands that write to a temp
+ * file instead of a screen. OS-specific rules (PATH format, shells, exit codes) are tested in
+ * the {@code platform} package.
  */
 @DisabledOnOs(OS.WINDOWS)
 public class PagerTest {
@@ -79,5 +81,34 @@ public class PagerTest {
     new Pager(new Terminal(true, Map.of("PAGER", recordLess + "'" + custom + "'", "LESS", "-S")))
         .show(TEXT, new PrintWriter(new StringWriter()), true);
     assertEquals("-S", Files.readString(custom));
+  }
+
+  @Test
+  void withoutPagerAndWithoutLessOnPathPrintsDirectly() throws Exception {
+    Path emptyBin = Files.createDirectory(tempDir.resolve("empty-bin"));
+    StringWriter out = new StringWriter();
+
+    // No PAGER and a PATH without less: no process is started, so no "command not found"
+    new Pager(new Terminal(true, Map.of("PATH", emptyBin.toString())))
+        .show(TEXT, new PrintWriter(out), true);
+
+    assertEquals(TEXT, out.toString());
+  }
+
+  @Test
+  void withoutPagerTheLessFoundOnPathIsRun() throws Exception {
+    Path bin = Files.createDirectory(tempDir.resolve("bin"));
+    Path paged = tempDir.resolve("paged.txt");
+    // A fake less that records what it is given and the LESS it sees
+    TestFiles.executable(bin.resolve("less"),
+        "#!/bin/sh\ncat > '" + paged + "'\nprintf %s \"$LESS\" > '" + paged + ".less'\n");
+    StringWriter out = new StringWriter();
+
+    new Pager(new Terminal(true, Map.of("PATH", bin.toString())))
+        .show(TEXT, new PrintWriter(out), true);
+
+    assertEquals(TEXT, Files.readString(paged));
+    assertEquals("FRX", Files.readString(tempDir.resolve("paged.txt.less")));
+    assertEquals("", out.toString());
   }
 }

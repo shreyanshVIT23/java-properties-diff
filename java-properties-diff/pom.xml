@@ -35,6 +35,15 @@
       <artifactId>picocli</artifactId>
       <version>4.7.7</version>
     </dependency>
+    <!-- https://github.com/jline/jline3 : terminal handling and the built-in Java less pager.
+         The jdk11 classifier leaves out the FFM provider (Java 22 class files), so Java 17
+         uses the JNI or exec provider. -->
+    <dependency>
+      <groupId>org.jline</groupId>
+      <artifactId>jline</artifactId>
+      <version>4.4.8</version>
+      <classifier>jdk11</classifier>
+    </dependency>
     <!-- Aggregate artifact: api + params + engine -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -149,10 +158,16 @@
             </goals>
             <configuration>
               <createDependencyReducedPom>false</createDependencyReducedPom>
-              <!-- our manifest (with Main-Class) wins; drop picocli's to avoid the overlap warning -->
+              <!-- our manifest (with Main-Class) wins; drop the libraries' to avoid overlap warnings -->
               <filters>
                 <filter>
                   <artifact>info.picocli:picocli</artifact>
+                  <excludes>
+                    <exclude>META-INF/MANIFEST.MF</exclude>
+                  </excludes>
+                </filter>
+                <filter>
+                  <artifact>org.jline:jline</artifact>
                   <excludes>
                     <exclude>META-INF/MANIFEST.MF</exclude>
                   </excludes>
@@ -162,6 +177,8 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>com.shreyansh.App</mainClass>
                 </transformer>
+                <!-- JLine finds its terminal providers through ServiceLoader (META-INF/services) -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
               </transformers>
             </configuration>
           </execution>
@@ -169,4 +186,156 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Release package, a zip that needs no installed Java: ./mvnw -Pdist -DskipTests verify
+      jpackage (in the JDK running Maven) builds an app-image with a trimmed Java runtime. It
+      can only build for the OS it runs on.
+      https://docs.oracle.com/en/java/javase/17/docs/specs/man/jpackage.html
+    -->
+    <profile>
+      <id>dist</id>
+      <properties>
+        <!-- jpackage needs a purely numeric version; Jenkins passes the tag's version -->
+        <app.version>1.0.0</app.version>
+        <!-- The JDK whose jpackage builds the launcher and whose runtime gets bundled. Distro JDKs
+             link libstdc++ dynamically, which makes jpackage launchers print "pure virtual method
+             called" on every run (JDK-8274856); pass a Temurin JDK: -Djpackage.jdk=/path/to/jdk -->
+        <jpackage.jdk>${java.home}</jpackage.jdk>
+        <!-- dist.os comes from the os-linux / os-windows profiles below -->
+        <dist.name>propdiff-${app.version}-${dist.os}-x64</dist.name>
+        <jpackage.input>${project.build.directory}/jpackage-input</jpackage.input>
+        <jpackage.dest>${project.build.directory}/dist</jpackage.dest>
+      </properties>
+      <build>
+        <plugins>
+          <!-- https://maven.apache.org/plugins/maven-antrun-plugin/ -->
+          <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.2.0</version>
+            <executions>
+              <execution>
+                <!-- Runs after shade: jpackage packages every file in its input, so stage only the jar -->
+                <id>stage-jpackage-input</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <delete dir="${jpackage.input}"/>
+                    <!-- jpackage refuses to write into an existing app-image -->
+                    <delete dir="${jpackage.dest}"/>
+                    <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                        todir="${jpackage.input}"/>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <!-- https://ant.apache.org/manual/Types/zipfileset.html : zip keeps no Unix modes
+                     unless filemode is given; the launcher, the runtime's tools and jspawnhelper
+                     (needed to start the pager process) must stay executable -->
+                <id>zip-and-checksum</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <zip destfile="${project.build.directory}/${dist.name}.zip">
+                      <zipfileset dir="${jpackage.dest}/propdiff" prefix="propdiff" filemode="755"
+                          includes="bin/** lib/runtime/bin/** lib/runtime/lib/jspawnhelper"/>
+                      <zipfileset dir="${jpackage.dest}/propdiff" prefix="propdiff"
+                          excludes="bin/** lib/runtime/bin/** lib/runtime/lib/jspawnhelper"/>
+                    </zip>
+                    <!-- "{0}  {1}" is the sha256sum format, so `sha256sum -c` can verify it -->
+                    <checksum file="${project.build.directory}/${dist.name}.zip"
+                        algorithm="SHA-256" fileext=".sha256" pattern="{0}  {1}"
+                        forceOverwrite="yes"/>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- https://www.mojohaus.org/exec-maven-plugin/ -->
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.6.4</version>
+            <executions>
+              <execution>
+                <id>jpackage</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>${jpackage.jdk}/bin/jpackage</executable>
+                  <arguments>
+                    <argument>--type</argument>
+                    <argument>app-image</argument>
+                    <argument>--name</argument>
+                    <argument>propdiff</argument>
+                    <argument>--app-version</argument>
+                    <argument>${app.version}</argument>
+                    <argument>--input</argument>
+                    <argument>${jpackage.input}</argument>
+                    <argument>--main-jar</argument>
+                    <argument>${project.build.finalName}.jar</argument>
+                    <argument>--main-class</argument>
+                    <argument>com.shreyansh.App</argument>
+                    <argument>--dest</argument>
+                    <argument>${jpackage.dest}</argument>
+                    <!-- Only the modules `jdeps -\-print-module-deps` reports (picocli, JLine) -->
+                    <argument>--add-modules</argument>
+                    <argument>java.base,java.desktop,java.management,jdk.httpserver</argument>
+                    <!-- OS-specific options (e.g. -\-win-console) from an argument file -->
+                    <argument>@${project.basedir}/src/jpackage/${dist.os}.args</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <!-- Use the project-local Temurin JDK for jpackage when it has been downloaded into .jdks/
+         (see .claude/setup.md). Declared after "dist" so its jpackage.jdk wins; an explicit
+         -Djpackage.jdk=... on the command line still overrides it. -->
+    <profile>
+      <id>local-temurin</id>
+      <activation>
+        <file>
+          <exists>${project.basedir}/.jdks/temurin-17/bin/jpackage</exists>
+        </file>
+      </activation>
+      <properties>
+        <jpackage.jdk>${project.basedir}/.jdks/temurin-17</jpackage.jdk>
+      </properties>
+    </profile>
+    <!-- Name the release and pick the jpackage argument file for the OS that builds it -->
+    <profile>
+      <id>os-linux</id>
+      <activation>
+        <os>
+          <family>unix</family>
+        </os>
+      </activation>
+      <properties>
+        <dist.os>linux</dist.os>
+      </properties>
+    </profile>
+    <profile>
+      <id>os-windows</id>
+      <activation>
+        <os>
+          <family>windows</family>
+        </os>
+      </activation>
+      <properties>
+        <dist.os>windows</dist.os>
+      </properties>
+    </profile>
+  </profiles>
 </project>

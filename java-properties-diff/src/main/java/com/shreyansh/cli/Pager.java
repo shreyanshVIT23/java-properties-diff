@@ -29,10 +29,7 @@ final class Pager {
   private final BuiltinPager builtin;
 
   Pager(Terminal terminal) {
-    // Placeholder until the JLine pager exists: failing makes the output print directly
-    this(terminal, Platform.current(), text -> {
-      throw new IOException("built-in pager not available yet");
-    });
+    this(terminal, Platform.current(), new JlineLess());
   }
 
   /** Lets tests choose the platform and the built-in pager. */

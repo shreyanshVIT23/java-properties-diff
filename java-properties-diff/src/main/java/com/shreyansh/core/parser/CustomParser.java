@@ -11,17 +11,22 @@ import java.util.List;
  * Hand-written parser for the {@link java.util.Properties#load(java.io.Reader)}
  * format.
  *
- * <p>Unlike {@link DefaultParser}, it returns the pairs in file order and keeps
- * every occurrence of a duplicated key.
+ * <p>Unlike {@link DefaultParser}, it returns the pairs in file order, keeps
+ * every occurrence of a duplicated key and can report line numbers.
  */
-public class CustomParser implements Parser {
+public class CustomParser implements LineAwareParser {
 
   @Override
   public List<KeyValue> parseFile(Path path) throws PropertiesReadException {
+    return parseFileWithLines(path).stream().map(NumberedKeyValue::pair).toList();
+  }
+
+  @Override
+  public List<NumberedKeyValue> parseFileWithLines(Path path) throws PropertiesReadException {
     try {
-      List<KeyValue> result = new ArrayList<>();
-      for (String line : logicalLines(Files.readString(path))) {
-        result.add(parseLine(line));
+      List<NumberedKeyValue> result = new ArrayList<>();
+      for (LogicalLine logical : logicalLines(Files.readString(path))) {
+        result.add(new NumberedKeyValue(parseLine(logical.text()), logical.startLine()));
       }
       return List.copyOf(result);
     } catch (IOException | IllegalArgumentException e) {
@@ -31,17 +36,23 @@ public class CustomParser implements Parser {
     }
   }
 
+  /** The text of one entry, with continuations joined, and the line it starts on. */
+  private record LogicalLine(String text, int startLine) {
+  }
+
   /**
    * Joins natural lines into logical lines and drops blank and comment lines.
-   * Every returned
-   * line starts at its first non-white space character.
+   * Every returned line starts at its first non-white space character.
    */
-  private static List<String> logicalLines(String content) {
-    List<String> logical = new ArrayList<>();
+  private static List<LogicalLine> logicalLines(String content) {
+    List<LogicalLine> logical = new ArrayList<>();
     StringBuilder current = null;
+    int startLine = 0;
     // String.lines() splits on \n, \r and \r\n: the same terminators Properties
     // uses
-    for (String natural : content.lines().toList()) {
+    List<String> naturals = content.lines().toList();
+    for (int index = 0; index < naturals.size(); index++) {
+      String natural = naturals.get(index);
       // Leading white space is ignored on new lines and on continuation lines alike
       String line = natural.substring(skipWhitespace(natural, 0));
       if (current == null) {
@@ -50,17 +61,18 @@ public class CustomParser implements Parser {
           continue;
         }
         current = new StringBuilder();
+        startLine = index + 1;
       }
       if (endsWithOddBackslashes(line)) {
         current.append(line, 0, line.length() - 1);
       } else {
-        logical.add(current.append(line).toString());
+        logical.add(new LogicalLine(current.append(line).toString(), startLine));
         current = null;
       }
     }
     if (current != null) {
       // File ended right after a continuation backslash
-      logical.add(current.toString());
+      logical.add(new LogicalLine(current.toString(), startLine));
     }
     return logical;
   }

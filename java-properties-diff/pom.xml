@@ -149,6 +149,15 @@
             </goals>
             <configuration>
               <createDependencyReducedPom>false</createDependencyReducedPom>
+              <!-- our manifest (with Main-Class) wins; drop picocli's to avoid the overlap warning -->
+              <filters>
+                <filter>
+                  <artifact>info.picocli:picocli</artifact>
+                  <excludes>
+                    <exclude>META-INF/MANIFEST.MF</exclude>
+                  </excludes>
+                </filter>
+              </filters>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>com.shreyansh.App</mainClass>

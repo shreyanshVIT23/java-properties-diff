@@ -1,4 +1,4 @@
-package com.shreyansh.cli;
+package com.shreyansh.core.diff;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -56,11 +56,5 @@ public class WordDiffTest {
 
     assertEquals(left, diff.prefix() + diff.leftMiddle() + diff.suffix());
     assertEquals(right, diff.prefix() + diff.rightMiddle() + diff.suffix());
-  }
-
-  @Test
-  void visibleShowsControlCharactersAsEscapes() {
-    assertEquals("a\\tb\\nc\\rd\\fe", WordDiff.visible("a\tb\nc\rd\fe"));
-    assertEquals("plain text = ok", WordDiff.visible("plain text = ok"));
   }
 }

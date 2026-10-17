@@ -1,8 +1,8 @@
-package com.shreyansh.cli;
+package com.shreyansh.core.diff;
 
 /**
- * Splits two values into the part they share and the part that changed, so the renderer can
- * emphasize only the changed part (delta's word-level highlighting).
+ * Splits two values into the part they share and the part that changed, so a front end (CLI,
+ * GUI) can emphasize only the changed part, like delta's word-level highlighting.
  *
  * @param prefix the common start of both values
  * @param leftMiddle the changed part of the left value
@@ -40,27 +40,6 @@ public record WordDiff(String prefix, String leftMiddle, String rightMiddle, Str
         text(leftPoints, prefix, leftPoints.length - suffix),
         text(rightPoints, prefix, rightPoints.length - suffix),
         text(leftPoints, leftPoints.length - suffix, leftPoints.length));
-  }
-
-  /**
-   * Shows tab, newline, carriage return and form feed as escapes so a value fits on one row.
-   *
-   * @param value the decoded property value
-   * @return the value with those control characters escaped
-   */
-  public static String visible(String value) {
-    StringBuilder out = new StringBuilder(value.length());
-    for (int i = 0; i < value.length(); i++) {
-      char c = value.charAt(i);
-      switch (c) {
-        case '\t' -> out.append("\\t");
-        case '\n' -> out.append("\\n");
-        case '\r' -> out.append("\\r");
-        case '\f' -> out.append("\\f");
-        default -> out.append(c);
-      }
-    }
-    return out.toString();
   }
 
   private static String text(int[] codePoints, int from, int to) {

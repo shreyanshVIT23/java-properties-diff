@@ -13,6 +13,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- The minimum Java of the app: any newer JDK (Temurin 26 on the Windows agent) still
+         emits Java 17 bytecode and rejects APIs newer than 17 -->
     <maven.compiler.release>17</maven.compiler.release>
   </properties>
 

@@ -3,7 +3,7 @@
 # the repository now instead of waiting for its 2-minute periodic scan.
 # https://git-scm.com/docs/githooks#_reference_transaction
 #
-# Install (once, from the git root java-git-diff):
+# Install (once, from the git root, the folder above java-properties-diff):
 #   ln -s ../../java-properties-diff/scripts/git-hooks/reference-transaction .git/hooks/
 # Needs jenkins/.secrets/api-token with one line:  user = "admin:<Jenkins API token>"
 #
@@ -22,7 +22,7 @@ while read -r _old _new ref; do
 done
 [ "$changed" = true ] || exit 0
 
-# Hooks run in the root of the working tree (java-git-diff)
+# Hooks run in the root of the working tree (the git root)
 token_file=${PROPDIFF_JENKINS_TOKEN_FILE:-java-properties-diff/jenkins/.secrets/api-token}
 [ -r "$token_file" ] || exit 0
 url=${PROPDIFF_JENKINS_URL:-http://localhost:8080}

@@ -12,5 +12,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends binutils unzip git \
     && rm -rf /var/lib/apt/lists/*
 
+# Builds clone /repo, which is not owned by jenkins (Docker Desktop bind mount); without this
+# git refuses it as "dubious ownership". System scope, so it applies to the jenkins user.
+# https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory
+RUN git config --system --add safe.directory /repo \
+    && git config --system --add safe.directory /repo/.git
+
 # Maven's local repository lives on a volume; create it so the volume is owned by jenkins
 RUN mkdir -p /home/jenkins/.m2 && chown -R jenkins:jenkins /home/jenkins/.m2

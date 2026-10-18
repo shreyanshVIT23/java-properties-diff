@@ -32,6 +32,21 @@ jenkins:
             retryWaitTime: 15
             # The agent only exists on the private compose network, so its host key is not pinned
             sshHostKeyVerificationStrategy: "nonVerifyingKeyVerificationStrategy"
+    # This Windows PC, connected on demand by jenkins/windows-agent.ps1 (inbound, over WebSocket;
+    # the agent passes -webSocket itself). Builds the Windows zip. See ../.claude/windows-ci.md
+    - permanent:
+        name: windows-agent
+        labelString: windows
+        # One Windows cell per build; never two jpackage runs at once on the PC
+        numExecutors: 1
+        # Short: Windows paths are limited to 260 characters
+        remoteFS: 'C:\ja'
+        launcher:
+          inbound:
+            workDirSettings:
+              disabled: false
+              failIfWorkDirIsMissing: false
+              internalDir: "remoting"
 
 credentials:
   system:
@@ -82,7 +97,7 @@ jobs:
         }
         factory {
           workflowBranchProjectFactory {
-            // The git repository root is java-git-diff; the project lives in a subfolder
+            // The project lives in a subfolder of the git repository root
             scriptPath('java-properties-diff/Jenkinsfile')
           }
         }

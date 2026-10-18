@@ -1,7 +1,8 @@
 // propdiff CI (Multibranch Pipeline, configured in jenkins/casc.yaml).
-// Every branch: tests, release zip, smoke test, archived zip + sha256.
-// Tags like v1.2.3: the same, with version 1.2.3, and the build is kept as a release.
-// The git root is java-git-diff; this project lives in the java-properties-diff folder.
+// Every branch: tests, release zip, smoke test, archived zip + sha256; on Linux, and on Windows
+// when the Windows agent is connected.
+// Tags like v1.2.3: the same on both platforms, with version 1.2.3, kept as a release.
+// This project lives in the java-properties-diff folder of the git root.
 
 /** Runs the Maven wrapper with the Temurin JDK of the agent (see jenkins/agent.Dockerfile). */
 def mvn(String args) {
@@ -11,6 +12,8 @@ def mvn(String args) {
       sh "sh ./mvnw -B -ntp ${args}"
     }
   } else {
+    // The Windows agent (jenkins/windows-agent.ps1) passes on its own JAVA_HOME, a JDK 21+
+    // with jpackage. The minimum Java of the app is still 17: maven.compiler.release in pom.xml
     bat "mvnw.cmd -B -ntp ${args}"
   }
 }
@@ -43,12 +46,25 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '5'))
   }
 
-  parameters {
-    booleanParam(name: 'BUILD_WINDOWS', defaultValue: false,
-        description: 'Also build on an agent labelled "windows" (none is connected yet)')
-  }
-
   stages {
+    // Windows zips can only be built on Windows, by this PC when jenkins/windows-agent.ps1 runs.
+    // Branch builds skip Windows when it is not connected; releases must have both zips.
+    stage('Detect platforms') {
+      steps {
+        script {
+          // nodesByLabel (pipeline-utility-steps) lists online nodes only, by default
+          def windows = nodesByLabel(label: 'windows')
+          env.WINDOWS_AGENT = windows ? 'true' : 'false'
+          if (env.TAG_NAME && !windows) {
+            error("Release ${env.TAG_NAME} needs the Windows agent: run "
+                + 'pwsh jenkins/windows-agent.ps1 on Windows, then build this tag again')
+          }
+          echo(windows ? "Windows agent online (${windows.join(', ')}): building linux and windows"
+              : 'No Windows agent online: building linux only')
+        }
+      }
+    }
+
     stage('Build') {
       matrix {
         axes {
@@ -60,7 +76,12 @@ pipeline {
         // Checked before asking for an agent, so it never waits for a missing Windows agent
         when {
           beforeAgent true
-          expression { PLATFORM == 'linux' || params.BUILD_WINDOWS }
+          expression { PLATFORM == 'linux' || env.WINDOWS_AGENT == 'true' }
+        }
+        // Options run before the agent is allocated, so this includes waiting for it: a Windows
+        // agent closed after 'Detect platforms' fails the cell instead of queueing it forever
+        options {
+          timeout(time: 20, unit: 'MINUTES')
         }
         agent { label "${PLATFORM}" }
         stages {
@@ -92,7 +113,7 @@ pipeline {
                   if (isUnix()) {
                     sh "sh scripts/smoke-test.sh target/propdiff-${appVersion()}-linux-x64.zip"
                   } else {
-                    echo 'No Windows smoke test yet (scripts/smoke-test.ps1 is still to come)'
+                    pwsh "./scripts/smoke-test.ps1 'target/propdiff-${appVersion()}-windows-x64.zip'; exit \$LASTEXITCODE"
                   }
                 }
               }

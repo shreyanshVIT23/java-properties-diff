@@ -20,7 +20,7 @@ services:
       - jenkins_home:/var/jenkins_home
       - ./casc.yaml:/var/jenkins_conf/casc.yaml:ro
       - ./.secrets/agent_key:/run/secrets/agent_key:ro
-      # The git repository root (java-git-diff), read-only: Jenkins scans it for branches/tags
+      # The git repository root (the folder above this project), read-only: Jenkins scans it for branches/tags
       - ../..:/repo:ro
     depends_on:
       - agent

@@ -93,10 +93,13 @@ tar -xzf .jdks/temurin-17.tar.gz -C .jdks/temurin-17 --strip-components=1
 - **Controller:** `jenkins/jenkins:lts-jdk21` at http://localhost:8080 (this machine only),
   user `admin`.
 - **Agent:** label `linux`, reached over SSH, with Temurin 17 for the build.
+- **Windows agent:** label `windows`, this Windows PC itself, connected on demand (below).
 - **Job:** a Multibranch Pipeline on this repository (mounted read-only).
   - every branch is built: tests, release zip, smoke test, archived zip + `.sha256`
-  - every `v*` tag (e.g. `v1.2.3`) becomes a **kept release build** with version `1.2.3`
-  - the Windows build is defined but off (`BUILD_WINDOWS`) until a Windows agent exists
+  - Linux always; Windows too when the Windows agent is online (detected at the start of each
+    build with `nodesByLabel`)
+  - every `v*` tag (e.g. `v1.2.3`) becomes a **kept release build** with version `1.2.3`, and
+    **fails** if the Windows agent is not online, so a release always has both zips
 
 One-time setup: create an SSH key pair in `jenkins/.secrets/` and a `jenkins/.env` with
 `JENKINS_ADMIN_PASSWORD` and `AGENT_SSH_PUBKEY`. Both are git-ignored. Then:
@@ -114,11 +117,27 @@ or tag changes:
   `ln -s ../../java-properties-diff/scripts/git-hooks/reference-transaction .git/hooks/`
 - its own test: `sh scripts/git-hooks/test-reference-transaction.sh`
 
+Windows builds: jpackage only builds for the OS it runs on, so the Windows zip is built on this
+PC, which joins Jenkins as the inbound agent `windows-agent` (over WebSocket on port 8080):
+```
+pwsh jenkins\windows-agent.ps1        # leave running; Ctrl+C disconnects
+pwsh jenkins\test-windows-agent.ps1   # in another terminal
+```
+The script checks that it runs on Windows, that `JAVA_HOME` is a JDK 21+ with jpackage (the
+agent needs 21+; the same JDK builds the zip), fetches the agent secret with the API token, and
+maps the controller's `file:///repo` to this checkout for the agent's builds only. The Windows
+zip bundles that JDK's runtime (currently Temurin 26); the app still targets Java 17
+(`maven.compiler.release`). Its smoke test is `pwsh scripts/smoke-test.ps1 <zip>`.
+
+**Security:** the Windows agent runs builds as your Windows user, with access to everything
+your account can touch, and any branch's Jenkinsfile runs there. Fine for a solo local repo;
+don't connect it to a Jenkins that builds other people's branches.
+
 Release:
 ```
 git tag -a v1.2.3 -m "propdiff 1.2.3"
 ```
-The build appears under **propdiff → Tags → v1.2.3**.
+The build appears under **propdiff → Tags → v1.2.3**. Start the Windows agent first.
 
 ## Project layout
 ```
@@ -133,7 +152,7 @@ src/main/java/com/shreyansh/
 src/test/                  JUnit 5 tests and .properties fixtures
 src/dist/README.txt        README shipped inside the release zip
 src/jpackage/*.args        OS-specific jpackage options (e.g. --win-console)
-scripts/                   smoke-test.sh, git hooks
+scripts/                   smoke-test.sh / smoke-test.ps1, git hooks
 jenkins/                   Docker Compose, Dockerfiles, plugins, Configuration as Code
 Jenkinsfile                the CI pipeline
 ```

@@ -1,0 +1,100 @@
+# Jenkins Configuration as Code: the whole Jenkins setup, applied at every start.
+# https://github.com/jenkinsci/configuration-as-code-plugin
+# ${...} values come from the environment (jenkins/.env) or, with readFile, from mounted files.
+jenkins:
+  systemMessage: "propdiff local CI, configured by jenkins/casc.yaml"
+  # Builds run on the agent only, never on the controller
+  numExecutors: 0
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  nodes:
+    - permanent:
+        name: linux-agent
+        labelString: linux
+        numExecutors: 2
+        remoteFS: /home/jenkins/agent
+        launcher:
+          ssh:
+            host: agent
+            port: 22
+            credentialsId: agent-ssh
+            # The agent image's own Java runs the Jenkins agent process
+            javaPath: /opt/java/openjdk/bin/java
+            launchTimeoutSeconds: 60
+            maxNumRetries: 10
+            retryWaitTime: 15
+            # The agent only exists on the private compose network, so its host key is not pinned
+            sshHostKeyVerificationStrategy: "nonVerifyingKeyVerificationStrategy"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: SYSTEM
+              id: agent-ssh
+              username: jenkins
+              description: "Key the controller uses to reach the build agent"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/agent_key}"
+
+security:
+  # The job below is defined by the administrator in this file, not by users
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false
+
+jobs:
+  - script: >
+      multibranchPipelineJob('java-properties-diff') {
+        displayName('propdiff')
+        description('Builds every branch; releases v* tags. Repo: the local checkout mounted at /repo.')
+        branchSources {
+          branchSource {
+            source {
+              git {
+                // A constant, unique id is required for Git branch sources (JENKINS-43693)
+                id('propdiff-local-repo')
+                remote('file:///repo')
+                traits {
+                  gitBranchDiscovery()
+                  gitTagDiscovery()
+                }
+              }
+            }
+            // Any strategy replaces the default "build everything except tags"
+            buildStrategies {
+              buildRegularBranches()
+              // Build tags up to 7 days old, so old tags are not rebuilt on the first scan
+              buildTags {
+                atLeastDays('')
+                atMostDays('7')
+              }
+            }
+          }
+        }
+        factory {
+          workflowBranchProjectFactory {
+            // The git repository root is java-git-diff; the project lives in a subfolder
+            scriptPath('java-properties-diff/Jenkinsfile')
+          }
+        }
+        orphanedItemStrategy {
+          discardOldItems {
+            numToKeep(5)
+          }
+        }
+        triggers {
+          // Safety net that finds new commits and tags; the post-commit hook is faster
+          periodicFolderTrigger {
+            interval('2m')
+          }
+        }
+      }

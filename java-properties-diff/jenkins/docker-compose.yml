@@ -1,0 +1,43 @@
+# Local Jenkins for propdiff: a controller and one Linux build agent.
+# Run from this folder (java-properties-diff/jenkins): docker compose up -d --build
+# One-time setup (key pair and .env) is described in ../.claude/setup.md.
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: controller.Dockerfile
+    ports:
+      # Only reachable from this machine
+      - "127.0.0.1:8080:8080"
+    environment:
+      CASC_JENKINS_CONFIG: /var/jenkins_conf/casc.yaml
+      # No setup wizard (casc.yaml configures everything); allow cloning the local file:///repo
+      JAVA_OPTS: >-
+        -Djenkins.install.runSetupWizard=false
+        -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?set it in jenkins/.env}
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./casc.yaml:/var/jenkins_conf/casc.yaml:ro
+      - ./.secrets/agent_key:/run/secrets/agent_key:ro
+      # The git repository root (java-git-diff), read-only: Jenkins scans it for branches/tags
+      - ../..:/repo:ro
+    depends_on:
+      - agent
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent.Dockerfile
+    environment:
+      JENKINS_AGENT_SSH_PUBKEY: ${AGENT_SSH_PUBKEY:?set it in jenkins/.env}
+    volumes:
+      - agent_m2:/home/jenkins/.m2
+      # Builds clone from the same read-only repository
+      - ../..:/repo:ro
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
+  agent_m2:

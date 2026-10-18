@@ -1,0 +1,124 @@
+// propdiff CI (Multibranch Pipeline, configured in jenkins/casc.yaml).
+// Every branch: tests, release zip, smoke test, archived zip + sha256.
+// Tags like v1.2.3: the same, with version 1.2.3, and the build is kept as a release.
+// The git root is java-git-diff; this project lives in the java-properties-diff folder.
+
+/** Runs the Maven wrapper with the Temurin JDK of the agent (see jenkins/agent.Dockerfile). */
+def mvn(String args) {
+  if (isUnix()) {
+    // SSH sessions do not inherit the container's ENV, so set the build JDK here
+    withEnv(['JAVA_HOME=/opt/temurin-17', 'PATH+JDK=/opt/temurin-17/bin']) {
+      sh "sh ./mvnw -B -ntp ${args}"
+    }
+  } else {
+    bat "mvnw.cmd -B -ntp ${args}"
+  }
+}
+
+/** jpackage needs a numeric version: v1.2.3 tags give 1.2.3, branch builds 0.0.<build>. */
+def appVersion() {
+  if (!env.TAG_NAME) {
+    return "0.0.${env.BUILD_NUMBER}"
+  }
+  def version = tagVersion(env.TAG_NAME)
+  if (version == null) {
+    error("Release tags must look like v1.2.3, got '${env.TAG_NAME}'")
+  }
+  return version
+}
+
+/** The 1.2.3 of a v1.2.3 tag, or null. NonCPS: a regex Matcher cannot be serialized. */
+@NonCPS
+def tagVersion(String tag) {
+  def match = tag =~ /^v(\d+(\.\d+){0,2})$/
+  return match ? match[0][1] : null
+}
+
+pipeline {
+  agent none
+
+  options {
+    timestamps()
+    timeout(time: 30, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '5'))
+  }
+
+  parameters {
+    booleanParam(name: 'BUILD_WINDOWS', defaultValue: false,
+        description: 'Also build on an agent labelled "windows" (none is connected yet)')
+  }
+
+  stages {
+    stage('Build') {
+      matrix {
+        axes {
+          axis {
+            name 'PLATFORM'
+            values 'linux', 'windows'
+          }
+        }
+        // Checked before asking for an agent, so it never waits for a missing Windows agent
+        when {
+          beforeAgent true
+          expression { PLATFORM == 'linux' || params.BUILD_WINDOWS }
+        }
+        agent { label "${PLATFORM}" }
+        stages {
+          stage('Verify') {
+            steps {
+              dir('java-properties-diff') {
+                mvn('clean verify')
+              }
+            }
+            post {
+              always {
+                junit testResults: 'java-properties-diff/target/surefire-reports/*.xml',
+                    allowEmptyResults: false
+              }
+            }
+          }
+          stage('Package') {
+            steps {
+              dir('java-properties-diff') {
+                // clean: re-shading an already shaded jar gives overlap warnings
+                mvn("-Pdist -DskipTests -Dapp.version=${appVersion()} clean verify")
+              }
+            }
+          }
+          stage('Smoke test') {
+            steps {
+              dir('java-properties-diff') {
+                script {
+                  if (isUnix()) {
+                    sh "sh scripts/smoke-test.sh target/propdiff-${appVersion()}-linux-x64.zip"
+                  } else {
+                    echo 'No Windows smoke test yet (scripts/smoke-test.ps1 is still to come)'
+                  }
+                }
+              }
+            }
+          }
+          stage('Archive') {
+            steps {
+              archiveArtifacts artifacts: 'java-properties-diff/target/propdiff-*.zip, '
+                  + 'java-properties-diff/target/propdiff-*.zip.sha256',
+                  fingerprint: true, onlyIfSuccessful: true
+            }
+          }
+        }
+      }
+    }
+
+    stage('Release') {
+      when { buildingTag() }
+      steps {
+        script {
+          // Kept forever: log rotation never deletes a release build or its zips
+          currentBuild.keepLog = true
+          currentBuild.description = "release ${env.TAG_NAME}"
+        }
+        echo "Released ${env.TAG_NAME} as version ${appVersion()}: download the zips from this build's artifacts"
+      }
+    }
+  }
+}

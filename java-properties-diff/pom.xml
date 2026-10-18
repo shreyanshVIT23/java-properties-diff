@@ -243,6 +243,13 @@
                 </goals>
                 <configuration>
                   <target>
+                    <!-- The user README goes next to bin/, with @VERSION@ filled in -->
+                    <copy file="${project.basedir}/src/dist/README.txt"
+                        todir="${jpackage.dest}/propdiff" overwrite="true" encoding="UTF-8">
+                      <filterset>
+                        <filter token="VERSION" value="${app.version}"/>
+                      </filterset>
+                    </copy>
                     <zip destfile="${project.build.directory}/${dist.name}.zip">
                       <zipfileset dir="${jpackage.dest}/propdiff" prefix="propdiff" filemode="755"
                           includes="bin/** lib/runtime/bin/** lib/runtime/lib/jspawnhelper"/>

@@ -78,6 +78,22 @@ check 2 "an unknown option exits with 2" --bogus
   && echo "ok   - jspawnhelper kept its executable bit" \
   || { echo "FAIL - jspawnhelper is not executable"; failures=$((failures + 1)); }
 
+# README.txt ships next to bin/ and names the same version as the zip file
+readme="$work/propdiff/README.txt"
+version=$(basename "$zip" | sed -n 's/^propdiff-\(.*\)-linux-x64\.zip$/\1/p')
+if [ ! -f "$readme" ]; then
+  echo "FAIL - propdiff/README.txt is missing from the zip"
+  failures=$((failures + 1))
+elif grep -qF "@VERSION@" "$readme"; then
+  echo "FAIL - README.txt still contains the @VERSION@ placeholder"
+  failures=$((failures + 1))
+elif [ -n "$version" ] && ! grep -qF "propdiff $version" "$readme"; then
+  echo "FAIL - README.txt does not mention 'propdiff $version'"
+  failures=$((failures + 1))
+else
+  echo "ok   - README.txt is included and names version $version"
+fi
+
 if [ "$failures" -eq 0 ]; then
   echo "smoke test passed"
 else

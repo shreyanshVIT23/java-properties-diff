@@ -72,8 +72,8 @@ pipeline {
             }
             post {
               always {
-                junit testResults: 'java-properties-diff/target/surefire-reports/*.xml',
-                    allowEmptyResults: false
+                junit(testResults: 'java-properties-diff/target/surefire-reports/*.xml',
+                    allowEmptyResults: false)
               }
             }
           }
@@ -100,9 +100,9 @@ pipeline {
           }
           stage('Archive') {
             steps {
-              archiveArtifacts artifacts: 'java-properties-diff/target/propdiff-*.zip, '
-                  + 'java-properties-diff/target/propdiff-*.zip.sha256',
-                  fingerprint: true, onlyIfSuccessful: true
+              // propdiff-*.zip* matches both the zip and its .sha256
+              archiveArtifacts(artifacts: 'java-properties-diff/target/propdiff-*.zip*',
+                  fingerprint: true, onlyIfSuccessful: true)
             }
           }
         }

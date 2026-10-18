@@ -103,6 +103,9 @@ One-time setup: create an SSH key pair in `jenkins/.secrets/` and a `jenkins/.en
 ```
 docker compose -f jenkins/docker-compose.yml up -d --build
 ```
+Check that both containers can read the mounted repository (from `jenkins/`):
+`sh test-repo-access.sh`. Both images mark `/repo` as a git `safe.directory`, because a
+Docker Desktop bind mount is not owned by the `jenkins` user.
 Jenkins scans for new commits and tags every 2 minutes. For instant builds, install the git
 hook `scripts/git-hooks/reference-transaction`, which asks Jenkins to scan as soon as a branch
 or tag changes:

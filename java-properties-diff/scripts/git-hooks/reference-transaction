@@ -1,0 +1,36 @@
+#!/bin/sh
+# git reference-transaction hook: when a branch or tag changes, ask the local Jenkins to scan
+# the repository now instead of waiting for its 2-minute periodic scan.
+# https://git-scm.com/docs/githooks#_reference_transaction
+#
+# Install (once, from the git root java-git-diff):
+#   ln -s ../../java-properties-diff/scripts/git-hooks/reference-transaction .git/hooks/
+# Needs jenkins/.secrets/api-token with one line:  user = "admin:<Jenkins API token>"
+#
+# Git ignores this hook's exit code in the "committed" state, and curl runs in the background,
+# so a stopped Jenkins never slows down or breaks git.
+
+# Only act once the refs have really changed
+[ "$1" = committed ] || exit 0
+
+changed=false
+while read -r _old _new ref; do
+  case "$ref" in
+    # Commits and branches, and tags; not refs/remotes/* (git fetch) or others
+    refs/heads/* | refs/tags/*) changed=true ;;
+  esac
+done
+[ "$changed" = true ] || exit 0
+
+# Hooks run in the root of the working tree (java-git-diff)
+token_file=${PROPDIFF_JENKINS_TOKEN_FILE:-java-properties-diff/jenkins/.secrets/api-token}
+[ -r "$token_file" ] || exit 0
+url=${PROPDIFF_JENKINS_URL:-http://localhost:8080}
+curl=${PROPDIFF_JENKINS_CURL:-curl}
+
+# The token is read from a curl config file so it never appears in the process list.
+# POST .../build on a Multibranch Pipeline is "Scan Multibranch Pipeline Now".
+("$curl" -fsS --max-time 5 --config "$token_file" -X POST \
+    "$url/job/java-properties-diff/build?delay=0") > /dev/null 2>&1 &
+
+exit 0

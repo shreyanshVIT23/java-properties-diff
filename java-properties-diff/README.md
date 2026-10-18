@@ -133,11 +133,21 @@ zip bundles that JDK's runtime (currently Temurin 26); the app still targets Jav
 your account can touch, and any branch's Jenkinsfile runs there. Fine for a solo local repo;
 don't connect it to a Jenkins that builds other people's branches.
 
-Release:
+Release (start the Windows agent first):
 ```
 git tag -a v1.2.3 -m "propdiff 1.2.3"
+git push origin main v1.2.3
 ```
-The build appears under **propdiff → Tags → v1.2.3**. Start the Windows agent first.
+The build appears under **propdiff → Tags → v1.2.3**. After both platforms pass, its
+`Release` stage uploads both zips and their `.sha256` files to a **draft** GitHub Release
+"propdiff 1.2.3" (`scripts/github-release.sh`, with the GitHub CLI on the Linux agent). Review it
+under the repository's **Releases** and click **Publish release**.
+- The tag must be on GitHub and point to the commit Jenkins built; Jenkins never creates tags.
+- Building the tag again replaces a draft's files; a published release is never changed.
+- One-time: a fine-grained GitHub token for this repository with **Contents: Read and write**,
+  stored with `.\jenkinsgithubsetup.ps1` (git root) and applied with
+  `docker compose -f jenkins/docker-compose.yml up -d --build`.
+- Test of the release script (fake `gh`, offline): `sh scripts/test-github-release.sh`.
 
 ## Project layout
 ```

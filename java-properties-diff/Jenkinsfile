@@ -1,7 +1,8 @@
 // propdiff CI (Multibranch Pipeline, configured in jenkins/casc.yaml).
 // Every branch: tests, release zip, smoke test, archived zip + sha256; on Linux, and on Windows
 // when the Windows agent is connected.
-// Tags like v1.2.3: the same on both platforms, with version 1.2.3, kept as a release.
+// Tags like v1.2.3: the same on both platforms, with version 1.2.3, kept as a release and
+// uploaded to a draft GitHub Release (the tag must be pushed to GitHub first).
 // This project lives in the java-properties-diff folder of the git root.
 
 /** Runs the Maven wrapper with the Temurin JDK of the agent (see jenkins/agent.Dockerfile). */
@@ -44,6 +45,12 @@ pipeline {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '5'))
+  }
+
+  environment {
+    // The GitHub repository releases go to. The checkout comes from file:///repo, so gh cannot
+    // infer it from the git remote.
+    GH_REPO = 'shreyanshVIT23/java-properties-diff'
   }
 
   stages {
@@ -124,21 +131,44 @@ pipeline {
               // propdiff-*.zip* matches both the zip and its .sha256
               archiveArtifacts(artifacts: 'java-properties-diff/target/propdiff-*.zip*',
                   fingerprint: true, onlyIfSuccessful: true)
+              script {
+                // The Release stage runs on another agent and collects both platforms' files
+                if (env.TAG_NAME) {
+                  stash(name: "dist-${PLATFORM}",
+                      includes: 'java-properties-diff/target/propdiff-*.zip*')
+                }
+              }
             }
           }
         }
       }
     }
 
+    // Uploads both platforms' zips + .sha256 to a DRAFT GitHub Release; you publish it on GitHub.
+    // The tag must already be pushed to GitHub and point to the built commit.
     stage('Release') {
-      when { buildingTag() }
+      when {
+        beforeAgent true
+        buildingTag()
+      }
+      // gh is installed in the Linux agent image (jenkins/agent.Dockerfile)
+      agent { label 'linux' }
       steps {
         script {
           // Kept forever: log rotation never deletes a release build or its zips
           currentBuild.keepLog = true
-          currentBuild.description = "release ${env.TAG_NAME}"
+          currentBuild.description = "release ${env.TAG_NAME} (draft on GitHub)"
         }
-        echo "Released ${env.TAG_NAME} as version ${appVersion()}: download the zips from this build's artifacts"
+        unstash 'dist-linux'
+        unstash 'dist-windows'
+        withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+          withEnv(["APP_VERSION=${appVersion()}"]) {
+            dir('java-properties-diff') {
+              // Single quotes: the shell expands the variables, so the token never enters Groovy
+              sh 'sh scripts/github-release.sh "$TAG_NAME" "$APP_VERSION" "$GIT_COMMIT" target/propdiff-*.zip*'
+            }
+          }
+        }
       }
     }
   }

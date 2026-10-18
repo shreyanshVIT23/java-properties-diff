@@ -60,6 +60,13 @@ credentials:
               privateKeySource:
                 directEntry:
                   privateKey: "${readFile:/run/secrets/agent_key}"
+          # Fine-grained GitHub token (Contents: read/write on this repository) used by the
+          # Release stage to create draft releases. Empty until jenkinsgithubsetup.ps1 is run.
+          - string:
+              scope: GLOBAL
+              id: github-token
+              secret: "${GITHUB_TOKEN:-}"
+              description: "GitHub token for draft releases (scripts/github-release.sh)"
 
 security:
   # The job below is defined by the administrator in this file, not by users

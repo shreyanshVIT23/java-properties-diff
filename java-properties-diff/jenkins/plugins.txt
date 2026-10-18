@@ -10,3 +10,5 @@ basic-branch-build-strategies
 junit
 timestamper
 pipeline-utility-steps
+plain-credentials
+credentials-binding
